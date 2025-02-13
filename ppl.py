@@ -239,6 +239,7 @@ if __name__ == "__main__":
     logger.info("Computing pseudo-perplexity...")
     # run the model on tensor_ids and tensor_attention_mask but in batches
     n = tensor_ids.shape[0]
+    # n = 256 # For testing purposes
     ls_nll = []
     for i in tqdm(range(0, n, batch_size)):
         batch_input_ids = tensor_ids[i:i + batch_size].to(device)
@@ -262,5 +263,9 @@ if __name__ == "__main__":
     ls_nll = ls_nll.cpu().numpy()
     output = pd.DataFrame({"NLL": ls_nll})
     output.to_csv(os.path.join(output_path, "nll.csv"), index=False)
+    
+    import json
+    json.dump({"mean_nll": nll_mean.item(), "ppl": ppl.item()}, open(os.path.join(output_path, "metrics.json"), "w"))
+    
     logger.info("Done!")
     
