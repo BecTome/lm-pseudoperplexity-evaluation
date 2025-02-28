@@ -2,7 +2,7 @@
 name = "lm-pseudoperplexity-evaluation"
 version = "0.1.0"
 description = ""
-authors = ["bramiozo <bramiozo@gmail.com>"]
+authors = ["dt4h"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
