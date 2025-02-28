@@ -22,7 +22,7 @@ def setup_logger(path: str="logs"):
         file_handler = logging.FileHandler(os.path.join(path, "log.txt"))
         file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
         logger.addHandler(file_handler)
-        
+
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
         logger.addHandler(stream_handler)
@@ -32,19 +32,19 @@ def sliding_window_reshape_batch(batch: Dict[str, List[List[int]]], window_size:
     """
     Applies sliding window reshaping to a batch of sequences.
     Input:
-    
+
     - batch: Batch of sequences with shape (batch_size, sequence_length). Useful for hf datasets parallelization.
     - window_size: Size of the sliding window.
     - stride: Stride of the sliding window.
     - pad_token_id: Token ID for padding.
-    
+
     Output:
-    
+
     - Dictionary with the reshaped input_ids and attention_mask. This is a standard format for hf datasets.
-    
+
     """
     batch_input_ids = batch["input_ids"]
-    
+
     all_input_ids = []
     all_attention_masks = []
 
@@ -73,47 +73,47 @@ def sliding_window_reshape_batch(batch: Dict[str, List[List[int]]], window_size:
 def create_iterative_masking(input_id: List[int], mask_token: int=None, pad_token_id: int=0):
     """
     Receives a list of integers, duplicated it and replaces each element with a mask_token.
-    
+
     - input_id: List of integers.
     - mask_token: Token to replace the elements. If None, no replacement is done. Useful for labels.
     - pad_token_id: Token ID for padding.
-    
+
     Output:
-    
+
     - Tuple with the masked sequence and the attention mask.
     """
     input_id = torch.tensor(input_id)  # Convert to tensor
     attention_mask = torch.ones_like(input_id)  # Create attention mask
     attention_mask[input_id == pad_token_id] = 0  # Set padding tokens to 0
-    
+
     n = input_id.shape[0]  # Number
     n_pad = input_id[input_id == pad_token_id].shape[0]  # Number of padding tokens
-    
+
     masked_sequence = input_id.repeat(n - n_pad, 1)
     attention_mask = attention_mask.repeat(n - n_pad, 1)
 
     if mask_token is not None:
         # Replace diagonal elements with mask_token
         masked_sequence.fill_diagonal_(mask_token)
-    
-    return masked_sequence, attention_mask    
+
+    return masked_sequence, attention_mask
 
 def multiple_masked_ids(batch: Dict[str, List[List[int]]], mask_token_id: int):
     """
     Applies multiple masking to a batch of sequences.
     Input:
-    
+
     - batch: Batch of sequences with shape (batch_size, n_windows, window_size). Useful for hf datasets parallelization.
     - mask_token_id: Token ID for masking.
-    
+
     Output:
-    
+
     - Dictionary with the masked input_ids and attention_mask. This is a standard format for hf datasets.
-    
+
     """
-    
+
     input_ids = batch["input_ids"]
-    
+
     all_input_ids = []
     all_attention_masks = []
     all_labels = []
@@ -127,25 +127,25 @@ def multiple_masked_ids(batch: Dict[str, List[List[int]]], mask_token_id: int):
             ls_rows_input_id.extend(input_id_out)
             ls_rows_attention_mask.extend(attention_mask_out)
             ls_labels.extend(labels)
-        
+
         all_input_ids.append(ls_rows_input_id)
         all_attention_masks.append(ls_rows_attention_mask)
         all_labels.append(ls_labels)
-        
+
     return {"input_ids": all_input_ids, "attention_mask": all_attention_masks, "labels": all_input_ids}
 
 def build_tensors_from_df(df: pd.DataFrame, tokenizer: AutoTokenizer, windows_size: int, stride: int):
     """
     Builds tensors from a DataFrame with text data.
-    
+
     - df: DataFrame with text data. It must contain a column named "text".
     - tokenizer: Hugging Face tokenizer.
-    
+
     Output:
-    
+
     - Tuple with input_ids, attention_mask and labels tensors.
     """
-    
+
 
     # Convert DataFrame to Hugging Face Dataset and tokenize the text
     dataset = Dataset.from_pandas(df).map(lambda x: tokenizer(x["text"]), batched=True)
@@ -169,32 +169,32 @@ def build_tensors_from_df(df: pd.DataFrame, tokenizer: AutoTokenizer, windows_si
     tensor_ids = torch.cat(dataset["input_ids"], dim=0)
     tensor_attention_mask = torch.cat(dataset["attention_mask"], dim=0)
     tensor_labels = torch.cat(dataset["labels"], dim=0)
-    
+
     return tensor_ids, tensor_attention_mask, tensor_labels
-    
-    
+
+
 if __name__ == "__main__":
-    
+
     # python ppl.py \
     #   --model "/gpfs/projects/bsc14/abecerr1/hub/models--PlanTL-GOB-ES--roberta-base-biomedical-clinical-es/snapshots/c6bfaa3cc4453dc6d947d279e3905c7083663af1/" \
     #   --csv_path "data/data/paraclite.csv" \
     #   --language "es"
-    
+
     parser = argparse.ArgumentParser(description="Compute pseudo-perplexity of a model.")
-    
+
     # Mandatory
     parser.add_argument("--model_name", type=str, help="Hugging Face model name or path.")
     parser.add_argument("--csv_path", type=str, help="Path to the CSV file containing text data.")
     parser.add_argument("--language", type=str, choices=["sv", "es", "en", "cz", "it", "nl", "ro"], help="Language column to use from CSV.")
-    
+
     # Optional
     parser.add_argument("--windows_size", type=int, default=None, help="Sliding window size.")
     parser.add_argument("--stride", type=int, default=None, help="Sliding window stride.")
     parser.add_argument("--batch_size", type=int, default=128, help="Model inference batch size.")
     parser.add_argument("--output_path", type=str, default="output", help="Path to the output log file.")
-    
+
     args = parser.parse_args()
-    
+
     # Variables definition
     model_name = args.model_name
     csv_path = args.csv_path
@@ -209,9 +209,9 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     output_path = os.path.join(args.output_path, datetime.now().strftime("%Y%m%d-%H%M%S"))
     os.makedirs(output_path, exist_ok=True)
-    
+
     setup_logger(path=output_path)
-    
+
     logger.info(f"Model: {model_name}")
     logger.info(f"CSV Path: {csv_path}")
     logger.info(f"Language: {language}")
@@ -221,7 +221,7 @@ if __name__ == "__main__":
     logger.info(f"Stride: {stride}")
     logger.info(f"Batch Size: {batch_size}")
     logger.info(f"Output Path: {output_path}")
-    
+
     # Load CSV and extract text
     logger.info("Loading CSV and tokenizing text...")
     df = pd.read_csv(csv_path)
@@ -230,9 +230,9 @@ if __name__ == "__main__":
 
     df_lang = df.groupby("doc_name").apply(lambda x: x[language].str.cat(sep="\n"), include_groups=False).reset_index()
     df_lang.columns = ["doc_name", "text"]
-    
+
     logger.info(f"Number of documents: {df_lang.shape[0]}")
-    
+
     logger.info("Building tensors...")
     tensor_ids, tensor_attention_mask, tensor_labels = build_tensors_from_df(df_lang, tokenizer, windows_size, stride)
 
@@ -245,27 +245,32 @@ if __name__ == "__main__":
         batch_input_ids = tensor_ids[i:i + batch_size].to(device)
         batch_attention_mask = tensor_attention_mask[i:i + batch_size].to(device)
         batch_tensor_labels = tensor_labels[i:i + batch_size].to(device)
-        
+
         with torch.no_grad():
             output = model(batch_input_ids, attention_mask=batch_attention_mask, labels=batch_tensor_labels)
             neg_log_likelihood = output.loss  # Model loss corresponds to NLL
-        
+
         ls_nll.append(neg_log_likelihood.item())
-            
+
     ls_nll = torch.tensor(ls_nll)
     nll_mean = ls_nll.mean()
+    nll_median = ls_nll.median()
     ppl = torch.exp(nll_mean)
+    ppl_median = torch.exp(nll_median)
 
     logger.info(f"Mean NLL: {nll_mean:.4f}")
     logger.info(f"PPL: {ppl:.4f}")
-    
+
     logger.info("Saving output...")
     ls_nll = ls_nll.cpu().numpy()
     output = pd.DataFrame({"NLL": ls_nll})
     output.to_csv(os.path.join(output_path, "nll.csv"), index=False)
-    
+
     import json
-    json.dump({"mean_nll": nll_mean.item(), "ppl": ppl.item()}, open(os.path.join(output_path, "metrics.json"), "w"))
-    
+    json.dump({"mean_nll": nll_mean.item(),
+               "median_nll": nll_median.item(),
+               "ppl": ppl.item(),
+               "ppl_median": ppl_median.item()},
+              open(os.path.join(output_path, "metrics.json"), "w"))
+
     logger.info("Done!")
-    
