@@ -83,10 +83,10 @@ def create_iterative_masking(input_id: List[int], mask_token: int, pad_token_id:
 
     - Tuple with the masked sequence and the attention mask.
     """
-    
+
     if mask_token is None:
         raise ValueError("mask_token cannot be None.")
-    
+
     input_id = torch.tensor(input_id)  # Convert to tensor
     attention_mask = torch.ones_like(input_id)  # Create attention mask
     attention_mask[input_id == pad_token_id] = 0  # Set padding tokens to 0
@@ -111,7 +111,7 @@ def multiple_masked_ids(batch: Dict[str, List[List[int]]], mask_token_id: int, p
     - batch: Batch of sequences with shape (batch_size, n_windows, window_size). Useful for hf datasets parallelization.
     - mask_token_id: Token ID for masking.
     - pad_token_id: Token ID for padding. Set to 0 by default.
-    
+
     Output:
 
     - Dictionary with the masked input_ids and attention_mask. This is a standard format for hf datasets.
@@ -212,8 +212,17 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     windows_size = args.windows_size if args.windows_size is not None else tokenizer.model_max_length
     stride = args.stride if args.stride is not None else tokenizer.model_max_length // 2
-    pad_token_id = args.pad_token_id
-    mask_token_id = args.mask_token_id
+
+    if args.pad_token_id is None:
+        pad_token_id = tokenizer.pad_token_id
+    else:
+        pad_token_id = args.pad_token_id
+
+    if args.mask_token_id is None:
+        mask_token_id = tokenizer.mask_token_id
+    else:
+        mask_token_id = args.mask_token_id
+
     batch_size = args.batch_size
     output_path = os.path.join(args.output_path, datetime.now().strftime("%Y%m%d-%H%M%S"))
     os.makedirs(output_path, exist_ok=True)
@@ -277,10 +286,10 @@ if __name__ == "__main__":
     ls_nll = ls_nll.cpu().numpy()
     output = pd.DataFrame({"NLL": ls_nll})
     output.to_csv(os.path.join(output_path, "nll.csv"), index=False)
-    
+
     with open(os.path.join(output_path, "analysis.json"), "w") as f:
         json.dump(d_analysis, f)
-    
+
     import json
     json.dump({"mean_nll": nll_mean.item(),
                "median_nll": nll_median.item(),
